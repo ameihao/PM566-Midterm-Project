@@ -1,0 +1,138 @@
+---
+title: "PM566 Midterm Project"
+author: "Amei Hao"
+date: "10/8/2020"
+output: html_document
+---
+## Introduction
+
+The project will build base on the crime data from 2020 to present provided by the Los Angeles Police Department. This dataset I looked up from LA city data, it reflects the occurrences of crime incidents in the City of Los Angeles going back to 2020. 
+The main purposes we have:
+a) The association between the location where the most crime incidences happened(77th street) and victims' age, sex and the different time slots of crimes.
+b) The distribution of the highest incidents of crime(AGGRAVATED ASSAULT) that happened in city Los Angeles.
+
+ 
+
+## Methods
+
+### EDA
+We use EDA(Explortary Data Analysis) to import, check and clean our data.
+```{r}
+# Load the packages
+library(data.table)
+library(tidyverse)
+library(leaflet)
+library(dplyr)
+library(ggplot2)
+```
+1.Check the dimensions, headers, footers.
+```{r}
+# Read in the data
+crime<-data.table::fread("/Users/amei/Downloads/Crime_Data_from_2020_to_Present.csv")
+dim(crime)
+# head(crime)
+# tail(crime) These outputs are too long here.
+
+```
+There are 147947 rows and 28 columns in the original crime 2020 to present dataset. We found that there are numerous observations in the dataset, so we decide to focus on the particular parts.
+
+2. Next, let's look into the variables that we care about more closely. Do a summary to see the quantiles, max, min for the numeric value.
+```{r}
+table(crime$`Vict Sex`)
+table(crime$`AREA NAME`)
+summary(crime$`Vict Age`)
+```
+Then, we found that the crimes happened at 77th Street the most, it draws attention and I decided to build a new dataset to figure out the association between the location and victims' age, sex and the time of crimes happens. And the victims' age is kind of implausible since min=0, max=120, we'll deal with the missing value and this kind of implausible values for the following steps.
+
+
+```{r}
+crime %>%
+  count(`AREA NAME`, sort = TRUE)
+c77th <- crime[which(crime$'AREA NAME' == '77th Street')]
+dim(c77th)
+```
+There are 7049 rows and 29 columns in our new dataset that we want to focus on.
+
+###Data Wrangling
+Perform pre-processing
+It looks like there are a lot of missing data. Let us check the proportion of missings and the implausible values
+```{r}
+# deal with the missing data in vict sex
+sex_missing <- sum(c77th$`Vict Sex`=='') + sum(c77th$`Vict Sex`=='X') + sum(c77th$`Vict Sex`=='H')
+sex_missing/length(c77th$`Vict Sex`)
+# deal with the missing data in vict age
+age_missing<- sum(c77th$`Vict Age`== 0) + sum(c77th$`Vict Age`=='')
+age_missing/length(c77th$`Vict Age`)
+# deal with the missing data in time
+time_missing<-sum(c77th$`TIME OCC`=='')
+time_missing/length(c77th$`TIME OCC`)
+```
+22.7% of the data are missing or implausible in Vic Sex, and 23.5% of the data are missing or implausible in Vic Age. There is no time slot missing values.
+```{r}
+# Remove the missing values,unclear and implausible values we found in the previous step
+c77 <- c77th[which(c77th$`Vict Sex` != '' & c77th$`Vict Sex` != 'X')]
+c77 <- c77[which(c77$`Vict Age` != 0 & c77$`Vict Age` != '')]
+```
+
+For the numeric value, let's take a look at its quantiles, min, max.
+```{r}
+summary(c77$`Vict Age`)
+```
+
+
+```{r}
+c77<- c77[`Vict Age`>14 & `Vict Age`<70]
+c77 <- c77[order(`Vict Age`)]
+dim(c77)
+```
+
+## Preliminary Results
+There are 9744 crime incidents reported at 77th Street at first, and we have 6998 observations after we filter the missing values and implausible value out. According to the time slots, 77th Street has the highest crime rate in the early morning hours before dawn. And the victim group is concentrated in the youth between 20 and 30 years old.In terms of gender, the number of victims is similar, with slightly more females.
+### Statistical summary graphs:
+
+```{r}
+c77$time<- cut(c77$`TIME OCC`, 
+               breaks=c(0, 600, 1200, 1800, 2400),
+               labels=c("before dawn","moring","afternoon","night"), 
+               right = FALSE)
+```
+
+
+```{r}
+# hist of Age by Time
+ c77 %>%
+  filter(!(c77$time %in% NA)) %>% 
+  ggplot()+ geom_histogram(mapping=aes(x=c77$`Vict Age`,fill=c77$time))+
+  scale_fill_brewer(palette = "PuBu")+labs(title="Age by Time category", x="Victom Age", y="count")
+# Barchart of Sex
+ggplot(c77,aes(x =`Vict Sex`)) + geom_bar(stat = 'count', fill = 'lightpink', colour = 'pink') + labs(title = "Freqs by sex")
+# Barchart of Age
+ggplot(c77,aes(x =`Vict Age`)) + geom_bar(stat = 'count', fill = 'lightblue', colour = 'blue') + labs(title = "Freqs by Age")
+```
+
+```{r}
+c77%>%
+  count(`Crm Cd Desc`, sort = TRUE)
+```
+AGGRAVATED ASSAULT happened the most, we will take a look for other possible locations for this sever criminal insidents.
+A street map will show us where the crime incidents happened. First let's get the unique latitutdes and longitudes and see how many criminal incidents there are.
+```{r}
+awd<- crime[which(crime$`Crm Cd Desc` == 'ASSAULT WITH DEADLY WEAPON, AGGRAVATED ASSAULT')]
+c77_loc <- (unique(awd[,c("LAT","LON")])) 
+dim(c77_loc)
+
+```
+
+```{r}
+leaflet(c77_loc) %>%
+  addProviderTiles('OpenStreetMap') %>%
+  addCircles(lat=~LAT ,lng=~LON, radius=0.01)
+```
+
+
+
+## Conclusion
+
+To sum up, the most dangerous area in city Los Angeles is 77th street, most of crime insidents happened there are aggravated assault,simple assult and robbery. In general, female are more likely to become a target to the criminal suspects. The victim group is concentrated in the youth between 20 and 30 years old.The mean age of victims is 38. And the peak time of the criminal incident happens is in the early morning, and the security situation will get better since afternoon at 77th street in city Los Angeles.
+
+
